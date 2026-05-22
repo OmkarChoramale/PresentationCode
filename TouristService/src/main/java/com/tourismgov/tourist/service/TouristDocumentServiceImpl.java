@@ -13,10 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.tourismgov.tourist.client.NotificationClient; // ✅ ADDED CLIENT IMPORT
 import com.tourismgov.tourist.dto.DocumentUploadRequest;
 import com.tourismgov.tourist.dto.DocumentVerifyRequest;
-import com.tourismgov.tourist.dto.NotificationRequestDTO; // ✅ ADDED DTO IMPORT
 import com.tourismgov.tourist.dto.TouristDocumentResponse;
 import com.tourismgov.tourist.enums.Status;
 import com.tourismgov.tourist.enums.VerificationStatus;
@@ -41,7 +39,6 @@ public class TouristDocumentServiceImpl implements TouristDocumentService {
 	private final TouristRepository touristRepository;
 	private final TouristMapper touristMapper; 
 	private final SecurityUtils securityUtils;
-	private final NotificationClient notificationClient; // ✅ ADDED INJECTED DEPENDENCY
 	
 	@Override
 	@Transactional
@@ -108,25 +105,7 @@ public class TouristDocumentServiceImpl implements TouristDocumentService {
 
 		syncTouristStatus(doc.getTourist());
 		
-		// ✅ ADDED: Private targeted notification matching BookingService fault-isolation pattern
-		if (VerificationStatus.VERIFIED == newStatus) {
-			sendNotificationSafe(
-					doc.getTourist().getUserId(), // Targeted tourist's flat system user identity
-					documentId,
-					"Document Verification Approved",
-					String.format("Your submitted document of type '%s' has been successfully verified by administrative staff.", doc.getDocType()),
-					"ACTION_REQUIRED"
-			);
-		} else if (VerificationStatus.REJECTED == newStatus) {
-			sendNotificationSafe(
-					doc.getTourist().getUserId(),
-					documentId,
-					"Document Verification Rejected",
-					String.format("Notice: Your document of type '%s' was rejected. Remarks: %s", doc.getDocType(), doc.getRemarks()),
-					"ACTION_REQUIRED"
-			);
-		}
-		
+		// Use Mapper for response
 		return touristMapper.toDocumentResponse(doc);
 	}
 
@@ -136,6 +115,7 @@ public class TouristDocumentServiceImpl implements TouristDocumentService {
 		TouristDocument doc = getTouristDocumentByUserOrThrow(userId, documentId);
 		log.info("Metadata fetched successfully for document {} of tourist {}", documentId, userId);
 		securityUtils.validateAccess(doc.getTourist().getUserId());
+		// Use Mapper for response
 		return touristMapper.toDocumentResponse(doc);
 	}
 
@@ -176,10 +156,12 @@ public class TouristDocumentServiceImpl implements TouristDocumentService {
 	}
 
 	private TouristDocument getTouristDocumentByUserOrThrow(Long userId, Long documentId) {
+		// 1. Find tourist profile using the userId
 		Tourist tourist = touristRepository.findByUserId(userId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
 						"No tourist profile found for the current user"));
 
+		// 2. Find the document using the fetched touristId
 		return documentRepository.findByDocumentIdAndTourist_TouristId(documentId, tourist.getTouristId())
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
 						String.format(TouristErrorMessage.ERROR_DOCUMENT_NOT_FOUND, documentId, tourist.getTouristId())));
@@ -208,21 +190,5 @@ public class TouristDocumentServiceImpl implements TouristDocumentService {
 			}
 		}
 		touristRepository.save(tourist);
-	}
-
-	// ✅ ADDED: Private Fault-Isolation Send Method mirroring BookingService pattern
-	private void sendNotificationSafe(Long userId, Long entityId, String subject, String message, String category) {
-		try {
-			notificationClient.createNotification(NotificationRequestDTO.builder()
-					.userId(userId)
-					.entityId(entityId)
-					.subject(subject)
-					.message(message)
-					.category(category)
-					.build());
-			log.info("Private notification successfully dispatched to tourist user ID: {}", userId);
-		} catch (Exception e) {
-			log.error("Fault-Isolation Triggered: Failed to send document notification: {}", e.getMessage());
-		}
 	}
 }

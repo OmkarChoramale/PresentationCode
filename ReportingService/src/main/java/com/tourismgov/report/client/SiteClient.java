@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import com.tourismgov.report.dto.SiteDTO;
 import java.util.List;
 
-@FeignClient(name = "SITE-SERVICE")
+@FeignClient(name = "SITE-SERVICE", fallback = SiteClientFallback.class)
 public interface SiteClient {
     
     @GetMapping("/tourismgov/v1/sites")

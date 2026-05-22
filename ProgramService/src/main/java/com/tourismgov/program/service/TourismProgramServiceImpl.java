@@ -266,8 +266,8 @@ public class TourismProgramServiceImpl implements TourismProgramService {
         try {
             userClient.logAction(new AuditLogRequest(userId, action, resource, status));
         } catch (Exception e) {
-            log.error("Audit logging to User Service failed: {}", e.getMessage());
-            throw new IllegalStateException("System compliance failure: Audit log could not be generated. Transaction aborted.", e);
+            // Non-fatal: log error but don't abort the main transaction
+            log.error("Audit logging to User Service failed (non-fatal): {}", e.getMessage());
         }
     }
 

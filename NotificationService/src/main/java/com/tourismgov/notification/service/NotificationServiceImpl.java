@@ -40,6 +40,7 @@ public class NotificationServiceImpl implements NotificationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Recipient userId is required.");
         }
 
+        // 1. Fetch user metadata (Email/Name) OPTIONALLY
         String recipientEmail = null;
         String recipientName = "User";
         
@@ -53,10 +54,12 @@ public class NotificationServiceImpl implements NotificationService {
             log.warn("Non-critical: Could not fetch user details for userId={} (Proceeding with defaults)", request.getUserId());
         }
 
+        // 2. Default category logic
         if (request.getCategory() == null) {
             request.setCategory(NotificationCategory.SYSTEM_CREATE);
         }
 
+        // 3. Build and save the Notification
         Notification notification = Notification.builder()
                 .userId(request.getUserId())
                 .entityId(request.getEntityId() != null ? request.getEntityId() : 0L)
@@ -69,6 +72,7 @@ public class NotificationServiceImpl implements NotificationService {
         Notification saved = notificationRepository.saveAndFlush(notification);
         log.info("Notification created: id={} for userId={}", saved.getNotificationId(), request.getUserId());
 
+        // 4. Email is non-critical
         if (recipientEmail != null) {
             try {
                 emailService.sendNotificationEmail(recipientEmail, recipientName, request.getSubject(), request.getMessage());
@@ -80,20 +84,21 @@ public class NotificationServiceImpl implements NotificationService {
         return toDTO(saved, recipientName);
     }
 
-    // ─── BROADCAST (Now Fault-Tolerant) ──────────────────────────────────────────
+    // ─── BROADCAST (Fault-Tolerant) ──────────────────────────────────────────
 
     @Override
     @Transactional
     public void sendGlobalNotification(NotificationRequestDTO request) {
-        // 1. Graceful Sender Validation
+        // 1. Graceful User Validation
         try {
             UserDTO sender = userClient.getUserById(request.getUserId());
             if (sender != null && "TOURIST".equals(sender.getRole())) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tourists cannot send broadcasts.");
             }
         } catch (ResponseStatusException e) {
-            throw e; 
+            throw e; // Preserve the 403 Forbidden error if it's genuinely a tourist
         } catch (Exception e) {
+            // ✅ THE FIX: Catch the 404/Feign error and bypass the strict check!
             log.warn("Non-critical: Could not validate sender userId={} with User Service. Proceeding with system broadcast.", request.getUserId());
         }
 
@@ -102,19 +107,17 @@ public class NotificationServiceImpl implements NotificationService {
             request.setCategory(NotificationCategory.SYSTEM_CREATE);
         }
 
-        // 3. Fetch Users Safely
-        List<UserDTO> allUsers = null;
+        // 3. Fetch Users
+        List<UserDTO> allUsers;
         try {
             allUsers = userClient.getAllUsers();
         } catch (Exception e) {
-            // ✅ FIXED: Log the stack trace deeply but do NOT throw an exception to caller service
-            log.error("CRITICAL ERROR: Downstream call to USER-SERVICE failed during global broadcast fetch. Notification distribution skipped.", e);
-            return; // Safely stop execution here without breaking the caller service transaction!
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Unable to retrieve user list. Please try again later.");
         }
 
         if (allUsers == null || allUsers.isEmpty()) {
-            log.warn("Broadcast stopped: No users found or user list was empty.");
-            return; 
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No users found to broadcast to.");
         }
 
         // 4. Build and Save the Batch
@@ -134,7 +137,8 @@ public class NotificationServiceImpl implements NotificationService {
 
         notificationRepository.saveAll(batch);
         
-        log.info("Broadcast by userId={} to {} users successful. Subject='{}'",
+        // Use request.getUserId() here to avoid NullPointerExceptions if sender wasn't fetched
+        log.info("Broadcast by userId={} to {} users. Subject='{}'",
                 request.getUserId(), batch.size(), request.getSubject());
 
         // 5. Send Emails

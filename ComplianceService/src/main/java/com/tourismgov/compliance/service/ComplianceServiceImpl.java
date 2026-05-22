@@ -92,7 +92,7 @@ public class ComplianceServiceImpl implements ComplianceService {
             log.info("Audit link successfully created for Ref: {}", saved.getReferenceNumber());
         } catch (Exception e) {
             log.error("Compliance created, but failed to trigger audit: {}", e.getMessage());
-            
+            // We catch this so the compliance record isn't rolled back if the audit logging fails
         }
 
         // 3. Log Action
@@ -148,7 +148,7 @@ public class ComplianceServiceImpl implements ComplianceService {
     public List<ComplianceRecordResponseDTO> getAllComplianceRecordsList() {
         log.debug("Fetching unpaginated compliance records for internal Feign clients");
         return complianceRepository.findAll().stream()
-                .map(this::mapToComplianceDto) 
+                .map(this::mapToComplianceDto) // FIXED: Was mapToDTO
                 .collect(Collectors.toList());
     }
     

@@ -4,6 +4,7 @@ import java.time.LocalDate;
 
 import com.tourismgov.tourist.enums.Gender;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -24,6 +25,7 @@ public class TouristUpdateRequest {
 
     private Gender gender;
     
+    @NotBlank(message = "Email is required")
     private String email;
     @Size(min = 5, max = 200, message = "Address must be between 5 and 200 characters")
     private String address;

@@ -117,7 +117,7 @@ public class AuthServiceImpl implements AuthService {
             ? "Welcome to TourismGov, " + savedUser.getName() + "! Your account has been created successfully and is now active."
             : "Welcome to TourismGov, " + savedUser.getName() + "! Your account has been created successfully and is pending activation.";
             
-        sendNotificationSafe(savedUser.getUserId(), savedUser.getUserId(), "Account Created", welcomeMsg, "SYSTEM_CREATE");
+        sendNotificationSafe(savedUser.getUserId(), savedUser.getUserId(), "Account Created", welcomeMsg, "SYSTEM");
 
         return mapToUserResponse(savedUser);
     }

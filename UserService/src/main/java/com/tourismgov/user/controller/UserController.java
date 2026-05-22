@@ -28,21 +28,31 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<UserResponse> getById(@PathVariable("id") Long id) { // 👈 Add ("id")
+    public ResponseEntity<UserResponse> getById(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getUserById(id));
+    }
+
+    // --- Internal Endpoints for Microservice-to-Microservice Communication ---
+    // These are used by NotificationService (Feign) and are permitAll in SecurityConfig
+    @GetMapping("/internal/all")
+    public ResponseEntity<List<UserResponse>> getAllInternal() {
+        return ResponseEntity.ok(userService.fetchAllUsers());
+    }
+
+    @GetMapping("/internal/{id}")
+    public ResponseEntity<UserResponse> getByIdInternal(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getUserById(id));
     }
 
     @PutMapping("/{userId}/approve")
-    public ResponseEntity<Void> approveUser(@PathVariable("userId") Long userId) { // 👈 Add ("userId")
+    public ResponseEntity<Void> approveUser(@PathVariable Long userId) {
         userService.approveUser(userId);
         return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/delete/{userId}")
-    public ResponseEntity<Void> deleteUser(@PathVariable("userId") Long userId) { // 👈 Add ("userId")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long userId) {
         userService.deleteUser(userId);
         return ResponseEntity.noContent().build();
     }
-    
-    
 }
