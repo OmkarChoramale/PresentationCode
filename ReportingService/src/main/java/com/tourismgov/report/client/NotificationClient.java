@@ -7,9 +7,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 
-import com.tourismgov.report.dto.NotificationRequestDTO; // ✅ Unified DTO
+import com.tourismgov.report.dto.NotificationRequestDTO;
 
-@FeignClient(name = "NOTIFICATION-SERVICE")
+@FeignClient(name = "NOTIFICATION-SERVICE", fallback = NotificationClientFallback.class)
 public interface NotificationClient {
 	
     @GetMapping("/tourismgov/v1/notifications/unread")
