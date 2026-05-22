@@ -67,10 +67,10 @@ public class DashboardServiceImpl implements DashboardService {
         // Step 4: Common Metric Calculations
         Map<String, Object> metrics = new LinkedHashMap<>();
         long totalS = allSites.size();
-        long activeS = allSites.stream().filter(s -> "ACTIVE".equalsIgnoreCase(s.getStatus())).count();
+    //    long activeS = allSites.stream().filter(s -> "ACTIVE".equalsIgnoreCase(s.getStatus())).count();
 
         metrics.put("totalHeritageSites", totalS);
-        metrics.put("siteActivityPct", calculatePercentage(activeS, totalS) + "%");
+       
         metrics.put("activeEvents", allEvents.stream().filter(e -> "ACTIVE".equalsIgnoreCase(e.getStatus())).count());
 
         // Step 5: Role-Specific Business Logic
@@ -79,10 +79,10 @@ public class DashboardServiceImpl implements DashboardService {
                 List<BookingDTO> myBookings = allBookings.stream()
                         .filter(b -> userId.equals(b.getTouristId()))
                         .toList();
-                long totalB = myBookings.size();
-                long doneB = myBookings.stream().filter(b -> "COMPLETED".equalsIgnoreCase(b.getStatus())).count();
+          //      long totalB = myBookings.size();
+             //   long doneB = myBookings.stream().filter(b -> "COMPLETED".equalsIgnoreCase(b.getStatus())).count();
 
-                metrics.put("tripCompletionRate", calculatePercentage(doneB, totalB) + "%");
+              
                 metrics.put("upcomingEvents", myBookings.stream().filter(b -> "CONFIRMED".equalsIgnoreCase(b.getStatus())).count());
                 unreadNotifications = unreadNotifications.stream()
                         .filter(n -> userId.equals(n.getUserId()))
@@ -126,10 +126,7 @@ public class DashboardServiceImpl implements DashboardService {
                 .build();
     }
 
-    /**
-     * Resilience Helper: RESTORED with try-catch logic.
-     * Prevents the whole dashboard from crashing if one microservice fails.
-     */
+  
     private <T> List<T> handleFetch(java.util.function.Supplier<List<T>> fetcher, String serviceName) {
         try {
             return fetcher.get();
@@ -140,8 +137,5 @@ public class DashboardServiceImpl implements DashboardService {
         }
     }
 
-    private double calculatePercentage(long part, long total) {
-        if (total <= 0) return 0.0;
-        return Math.round((double) part / total * 100.0 * 10.0) / 10.0;
-    }
+  
 }

@@ -9,14 +9,14 @@ import com.tourismgov.site.dto.NotificationRequestDTO;
 public interface NotificationClient {
 
     /**
-     * TARGETED: Hits NotificationController.create (POST /notifications)
+     * TARGETED: Hits NotificationController.create (Point 6)
      * Used for private/targeted alerts to a specific user.
      */
-    @PostMapping("/tourismgov/v1/notifications")
+    @PostMapping("/tourismgov/v1/notifications/create")
     void createNotification(@RequestBody NotificationRequestDTO request);
 
     /**
-     * BROADCAST: Hits NotificationController.broadcast (POST /notifications/broadcast)
+     * BROADCAST: Hits NotificationController.broadcast (Point 7)
      * Used for global system-wide announcements.
      */
     @PostMapping("/tourismgov/v1/notifications/broadcast")

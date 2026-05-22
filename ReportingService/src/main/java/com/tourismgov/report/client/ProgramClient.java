@@ -7,7 +7,7 @@ import com.tourismgov.report.dto.ProgramDTO;
 
 import java.util.List;
 
-@FeignClient(name = "PROGRAM-SERVICE", fallback = ProgramClientFallback.class)
+@FeignClient(name = "PROGRAM-SERVICE")
 public interface ProgramClient {
     
     @GetMapping("/tourismgov/v1/programs")

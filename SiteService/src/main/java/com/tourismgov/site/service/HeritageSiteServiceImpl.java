@@ -77,13 +77,12 @@ public class HeritageSiteServiceImpl implements HeritageSiteService {
                     .entityId(saved.getSiteId())
                     .subject("New Heritage Site Added!")
                     .message(String.format("New heritage site added: %s at %s.", saved.getName(), saved.getLocation()))
-                    .category("SYSTEM_CREATE")
+                    .category("ANNOUNCEMENT")
                     .build();
             notificationClient.sendGlobalBroadcast(broadcastReq); // Hits the /broadcast endpoint
-        } catch (Exception e) {
-            log.error("Global notification failed: {}", e.getMessage());
+        }  catch (Exception e) {
+            log.error("Global notification failed completely", e); // Passing 'e' as the second arg prints the full stack trace
         }
-
         return mapToSiteResponse(saved);
     }
 
@@ -129,7 +128,21 @@ public class HeritageSiteServiceImpl implements HeritageSiteService {
         // Audit Log (User Service)
         logAuditSafe(currentUserId, ACTION_SITE_UPDATE, RESOURCE_SITE, STATUS_SUCCESS);
 
-        // ❌ Notification logic removed from updateSite as per request
+        // ✅ ADDED: Global Broadcast Notification for Site Modification
+        try {
+            NotificationRequestDTO broadcastReq = NotificationRequestDTO.builder()
+                    .userId(currentUserId) // Sender identification for role authorization
+                    .entityId(updatedSite.getSiteId())
+                    .subject("Heritage Site Profile Updated")
+                    .message(String.format("Information update: The official details for '%s' have been modified.", updatedSite.getName())+" and status of Heritage side is "+updatedSite.getStatus()+".")
+                    .category("SITE")
+                    .build();
+            notificationClient.sendGlobalBroadcast(broadcastReq);
+            log.info("Global update notification successfully dispatched for site ID: {}", siteId);
+        } catch (Exception e) {
+            // Fault-isolation safety guard: operations remain reliable even if the notification server drops
+            log.error("Global notification failed on site update transaction: {}", e.getMessage());
+        }
 
         return mapToSiteResponse(updatedSite);
     }
@@ -178,7 +191,7 @@ public class HeritageSiteServiceImpl implements HeritageSiteService {
                     .entityId(site.getSiteId())
                     .subject("Heritage Site Closed Permanently")
                     .message(String.format("Notice: %s has been permanently closed.", site.getName()))
-                    .category("SYSTEM_CREATE")
+                    .category("SYSTEM_UPDATE")
                     .build();
             notificationClient.sendGlobalBroadcast(broadcastReq);
         } catch (Exception e) {

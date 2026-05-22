@@ -63,15 +63,12 @@ public class EventServiceImpl implements EventService {
         log.info("Creating event: {}", request.getTitle());
         Long currentUserId = SecurityUtils.getCurrentUserId();
 
-        // 1. Check for Duplicate Event
         if (eventRepository.existsByTitleAndSiteIdAndDate(request.getTitle(), request.getSiteId(), request.getDate())) {
             log.warn("Duplicate event creation attempt blocked for title: {}", request.getTitle());
             logAuditSafe(currentUserId, ACTION_EVENT_CREATE, RESOURCE_EVENT, STATUS_FAILED);
-            throw new IllegalStateException(
-                    "An event with this title is already scheduled at this site for the given date.");
+            throw new IllegalStateException("An event with this title is already scheduled at this site for the given date.");
         }
 
-        // 2. Validate Site and Program strictly via Feign Clients and fetch Site
         SiteDto site;
         try {
             site = validateAndGetSite(request.getSiteId());
@@ -81,24 +78,18 @@ public class EventServiceImpl implements EventService {
             throw e; 
         }
 
-        // 3. Save Event
         Event event = new Event();
         event.setSiteId(request.getSiteId());
         event.setTitle(request.getTitle());
         event.setDate(request.getDate());
         
-        // ---> AUTOMATIC LOCATION ASSIGNMENT <---
         if (request.getLocation() != null && !request.getLocation().isBlank()) {
             event.setLocation(site.getName() + " (" + request.getLocation() + ")");
         } else {
             event.setLocation(site.getName());
         }
 
-        if (request.getStatus() != null) {
-            event.setStatus(request.getStatus());
-        } else {
-            event.setStatus(EventStatus.SCHEDULED);
-        }
+        event.setStatus(request.getStatus() != null ? request.getStatus() : EventStatus.SCHEDULED);
 
         if (request.getProgramId() != null) {
             event.setProgramId(request.getProgramId());
@@ -106,10 +97,8 @@ public class EventServiceImpl implements EventService {
 
         Event saved = eventRepository.save(event);
 
-        // 4. Audit Log
         logAuditSafe(currentUserId, ACTION_EVENT_CREATE, RESOURCE_EVENT, STATUS_SUCCESS);
 
-        // 5. Global Broadcast Notification via perfectly formatted DTO
         String message = String.format("A new event '%s' has been scheduled at %s on %s.", 
                 saved.getTitle(), saved.getLocation(), saved.getDate().toLocalDate());
         
@@ -126,22 +115,17 @@ public class EventServiceImpl implements EventService {
 
         Long currentUserId = SecurityUtils.getCurrentUserId();
 
-        // STRICT IMMUTABILITY RULE FOR TERMINAL STATES
         if (event.getStatus() == EventStatus.CANCELLED || event.getStatus() == EventStatus.COMPLETED) {
             logAuditSafe(currentUserId, ACTION_EVENT_UPDATE, RESOURCE_EVENT, STATUS_FAILED);
             throw new IllegalStateException("Event details cannot be edited: This event is already " + event.getStatus() + ".");
         }
 
-        // 1. Prevent updating to a duplicate of ANOTHER event
-        if (eventRepository.existsByTitleAndSiteIdAndDateAndEventIdNot(request.getTitle(), request.getSiteId(),
-                request.getDate(), eventId)) {
+        if (eventRepository.existsByTitleAndSiteIdAndDateAndEventIdNot(request.getTitle(), request.getSiteId(), request.getDate(), eventId)) {
             log.warn("Update blocked: Conflicts with an existing event title: {}", request.getTitle());
             logAuditSafe(currentUserId, ACTION_EVENT_UPDATE, RESOURCE_EVENT, STATUS_FAILED);
-            throw new IllegalStateException(
-                    "Another event with this title is already scheduled at this site for the given date.");
+            throw new IllegalStateException("Another event with this title is already scheduled at this site for the given date.");
         }
 
-        // 2. Validate Site and Program status + dates during update and fetch Site
         SiteDto site;
         try {
             site = validateAndGetSite(request.getSiteId());
@@ -151,12 +135,10 @@ public class EventServiceImpl implements EventService {
             throw e;
         }
 
-        // 3. Update fields
         event.setTitle(request.getTitle());
         event.setDate(request.getDate());
         event.setSiteId(request.getSiteId());
 
-        // ---> AUTOMATIC LOCATION UPDATE <---
         if (request.getLocation() != null && !request.getLocation().isBlank()) {
             event.setLocation(site.getName() + " (" + request.getLocation() + ")");
         } else {
@@ -173,10 +155,8 @@ public class EventServiceImpl implements EventService {
 
         Event updatedEvent = eventRepository.save(event);
 
-        // 4. Audit Log
         logAuditSafe(currentUserId, ACTION_EVENT_UPDATE, RESOURCE_EVENT, STATUS_SUCCESS);
 
-        // 5. Global Broadcast Notification for Updates via DTO
         String message = String.format("Event '%s' details have been updated.", updatedEvent.getTitle());
         sendGlobalBroadcastSafe(currentUserId, updatedEvent.getEventId(), "Event Details Updated", message, "EVENT");
 
@@ -185,7 +165,6 @@ public class EventServiceImpl implements EventService {
     
     @Override
     public boolean eventExists(Long eventId) {
-        log.debug("Checking existence of event ID: {}", eventId);
         return eventRepository.existsById(eventId);
     }
 
@@ -206,10 +185,8 @@ public class EventServiceImpl implements EventService {
 
         logAuditSafe(currentUserId, ACTION_EVENT_STATUS_UPDATE, RESOURCE_EVENT, STATUS_SUCCESS);
 
-        // Private System Alert Notification for Status Updates via DTO
         if (!oldStatus.equals(updatedEvent.getStatus())) {
-            String message = String.format("Alert: Event '%s' status changed to %s.", event.getTitle(),
-                    updatedEvent.getStatus().name());
+            String message = String.format("Alert: Event '%s' status changed to %s.", event.getTitle(), updatedEvent.getStatus().name());
             sendNotificationSafe(currentUserId, event.getEventId(), "Event Status Update", message, "ALERT");
         }
 
@@ -220,7 +197,6 @@ public class EventServiceImpl implements EventService {
     @Transactional
     public void cancelEventsByProgram(Long programId) {
         log.info(">>>> [EVENT-SERVICE] RECEIVED CANCELLATION REQUEST FOR PROGRAM ID: {}", programId);
-
         List<Event> events = eventRepository.findByProgramId(programId);
 
         if (events == null || events.isEmpty()) {
@@ -228,11 +204,13 @@ public class EventServiceImpl implements EventService {
             return;
         }
 
-        log.info(">>>> [EVENT-SERVICE] SUCCESS: Found {} events. Updating status now...", events.size());
-
         events.forEach(event -> {
             log.info(">>>> [EVENT-SERVICE] Cancelling Event: {}", event.getTitle());
             event.setStatus(EventStatus.CANCELLED);
+            
+            // Broadcast user notification about automated cancellation
+            String message = String.format("Notice: Event '%s' has been cancelled because the parent Tourism Program was cancelled.", event.getTitle());
+            sendGlobalBroadcastSafe(1L, event.getEventId(), "Event Cancelled", message, "ALERT");
         });
 
         eventRepository.saveAll(events);
@@ -263,7 +241,6 @@ public class EventServiceImpl implements EventService {
     @Override
     public Page<EventResponse> getEventsPaged(String status, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
-
         if (status != null && !status.isBlank()) {
             try {
                 EventStatus statusEnum = EventStatus.valueOf(status.toUpperCase());
@@ -272,35 +249,33 @@ public class EventServiceImpl implements EventService {
                 throw new IllegalArgumentException(ErrorMessages.INVALID_STATUS);
             }
         }
-
         return eventRepository.findAll(pageable).map(this::mapToResponse);
     }
 
     @Override
     @Transactional
     public void deleteEvent(Long eventId) {
-        // PROFESSIONAL SOFT DELETE
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException(ENTITY_NAME, eventId));
         
         log.info("Soft-deleting event ID: {}", eventId);
         event.setStatus(EventStatus.CANCELLED);
-        eventRepository.save(event);
+        Event saved = eventRepository.save(event);
         
-        logAuditSafe(SecurityUtils.getCurrentUserId(), ACTION_EVENT_DELETE, RESOURCE_EVENT, STATUS_SUCCESS);
-    }
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        logAuditSafe(currentUserId, ACTION_EVENT_DELETE, RESOURCE_EVENT, STATUS_SUCCESS);
 
-    // --- ENHANCED VALIDATION LOGIC WITH CIRCUIT BREAKER UNWRAPPING ---
+        String message = String.format("Notice: The event '%s' has been officially cancelled by administration.", saved.getTitle());
+        sendGlobalBroadcastSafe(currentUserId, saved.getEventId(), "Event Cancelled", message, "ALERT");
+    }
 
     private SiteDto validateAndGetSite(Long siteId) {
         if (siteId == null) return null;
-        
         try {
             SiteDto site = siteClient.getSiteById(siteId);
-
+            // ✅ FIXED: Strictly aligns contract with your new uniform enum definitions
             if (site != null && "PERMANENTLY_CLOSED".equalsIgnoreCase(String.valueOf(site.getStatus()))) {
-                throw new IllegalStateException(
-                        "Event cannot be created: The heritage site is PERMANENTLY_CLOSED.");
+                throw new IllegalStateException("Event cannot be created: The heritage site is PERMANENTLY_CLOSED.");
             }
             return site; 
         } catch (FeignException.NotFound e) {
@@ -309,15 +284,9 @@ public class EventServiceImpl implements EventService {
             throw e;
         } catch (Exception e) {
             if (e.getCause() instanceof FeignException feignEx) {
-                if (feignEx.status() == 404) {
-                    throw new ResourceNotFoundException(ENTITY_SITE, siteId);
-                }
-                if (feignEx.status() == 403) {
-                    throw new IllegalStateException("Access Denied: The Event Service is not authorized to fetch Site ID: " + siteId);
-                }
-                if (feignEx.status() == 401) {
-                    throw new IllegalStateException("Unauthorized: Authentication is missing for the Site Service request.");
-                }
+                if (feignEx.status() == 404) throw new ResourceNotFoundException(ENTITY_SITE, siteId);
+                if (feignEx.status() == 403) throw new IllegalStateException("Access Denied: Not authorized to fetch Site ID: " + siteId);
+                if (feignEx.status() == 401) throw new IllegalStateException("Unauthorized: Authentication details are missing.");
             }
             throw new RuntimeException(ErrorMessages.SITE_SERVICE_ERROR, e);
         }
@@ -325,16 +294,11 @@ public class EventServiceImpl implements EventService {
 
     private void validateProgram(Long programId, LocalDateTime eventDate) {
         if (programId == null) return;
-        
         try {
             ProgramDto program = programClient.getProgramById(programId);
-
             String pStatus = String.valueOf(program.getStatus());
-            if ("CANCELLED".equalsIgnoreCase(pStatus)) {
-                throw new IllegalStateException("Event cannot be created: The associated Tourism Program is CANCELLED.");
-            }
-            if ("COMPLETED".equalsIgnoreCase(pStatus)) {
-                throw new IllegalStateException("Event cannot be created: The associated Tourism Program is COMPLETED.");
+            if ("CANCELLED".equalsIgnoreCase(pStatus) || "COMPLETED".equalsIgnoreCase(pStatus)) {
+                throw new IllegalStateException("Event cannot be created: The associated Tourism Program is " + pStatus);
             }
 
             if (eventDate != null) {
@@ -343,10 +307,10 @@ public class EventServiceImpl implements EventService {
                 LocalDate pEnd = program.getEndDate();
 
                 if (pStart != null && eDate.isBefore(pStart)) {
-                    throw new IllegalArgumentException(String.format("Invalid Event Date: You are giving a date (%s) before the program starts (%s).", eDate, pStart));
+                    throw new IllegalArgumentException(String.format("Invalid Event Date: Date (%s) occurs before program schedule launch (%s).", eDate, pStart));
                 }
                 if (pEnd != null && eDate.isAfter(pEnd)) {
-                    throw new IllegalArgumentException(String.format("Invalid Event Date: You are giving a date (%s) after the program ends (%s).", eDate, pEnd));
+                    throw new IllegalArgumentException(String.format("Invalid Event Date: Date (%s) occurs after program schedule wrap-up (%s).", eDate, pEnd));
                 }
             }
         } catch (FeignException.NotFound e) {
@@ -355,21 +319,13 @@ public class EventServiceImpl implements EventService {
             throw e;
         } catch (Exception e) {
             if (e.getCause() instanceof FeignException feignEx) {
-                if (feignEx.status() == 404) {
-                    throw new ResourceNotFoundException(ENTITY_PROGRAM, programId);
-                }
-                if (feignEx.status() == 403) {
-                    throw new IllegalStateException("Access Denied: The Event Service is not authorized to fetch Program ID: " + programId);
-                }
-                if (feignEx.status() == 401) {
-                    throw new IllegalStateException("Unauthorized: Authentication is missing for the Program Service request.");
-                }
+                if (feignEx.status() == 404) throw new ResourceNotFoundException(ENTITY_PROGRAM, programId);
+                if (feignEx.status() == 403) throw new IllegalStateException("Access Denied: Not authorized to fetch Program ID: " + programId);
+                if (feignEx.status() == 401) throw new IllegalStateException("Unauthorized: Microservice authentication context missing.");
             }
             throw new RuntimeException("Error communicating with Program Service.", e);
         }
     }
-
-    // --- REFACTORED DTO-BASED NOTIFICATION TRIGGERS ---
 
     private void sendGlobalBroadcastSafe(Long userId, Long entityId, String subject, String message, String category) {
         try {
@@ -382,7 +338,7 @@ public class EventServiceImpl implements EventService {
                     .build());
             log.info("Global broadcast sent successfully for event ID: {}", entityId);
         } catch (Exception e) {
-            log.error("Global broadcast failed: {}", e.getMessage());
+            log.error("Fault-Isolation Triggered: Global broadcast pipeline drop handled safely: {}", e.getMessage());
         }
     }
 
@@ -397,7 +353,7 @@ public class EventServiceImpl implements EventService {
                     .build());
             log.info("Private notification sent to user: {}", userId);
         } catch (Exception e) {
-            log.error("Failed to push targeted notification: {}", e.getMessage());
+            log.error("Fault-Isolation Triggered: Private notification pipeline drop handled safely: {}", e.getMessage());
         }
     }
 
@@ -409,11 +365,9 @@ public class EventServiceImpl implements EventService {
         response.setTitle(event.getTitle());
         response.setLocation(event.getLocation());
         response.setDate(event.getDate());
-
         if (event.getStatus() != null) {
             response.setStatus(event.getStatus().name());
         }
-
         return response;
     }
 

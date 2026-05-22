@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.tourismgov.tourist.client.NotificationClient;
+import com.tourismgov.tourist.client.NotificationClient; // ✅ UNCOMMENTED/RESTORED IMPORT
 import com.tourismgov.tourist.dto.NotificationRequestDTO;
 import com.tourismgov.tourist.dto.TouristRequest;
 import com.tourismgov.tourist.dto.TouristResponse;
@@ -34,7 +34,7 @@ public class TouristServiceImpl implements TouristService {
     private final TouristRepository touristRepository;
     private final TouristMapper touristMapper;
     private final SecurityUtils securityUtils;
-    private final NotificationClient notificationClient;
+    private final NotificationClient notificationClient; // ✅ UNCOMMENTED/RESTORED DEPENDENCY
 
     @Override
     @Transactional
@@ -80,13 +80,24 @@ public class TouristServiceImpl implements TouristService {
     public TouristResponse updateTourist(Long userId, TouristUpdateRequest request) {
         log.info("Updating tourist profile for user ID: {}", userId);
         Tourist tourist = findTouristByUserIdOrThrow(userId);
+        String verifiedEmail = securityUtils.getCurrentUserEmail();
         securityUtils.validateAccess(tourist.getUserId());
         
         touristMapper.updateEntityFromRequest(request, tourist);
+        tourist.setEmail(verifiedEmail.toLowerCase()); 
         validateAdult(tourist);
 
         tourist = touristRepository.save(tourist);
         log.info("Tourist ID {} updated successfully", userId);
+
+        // ✅ ADDED: Private targeted notification for profile details update
+        sendNotificationSafe(
+            userId, // The user ID of the targeted tourist
+            tourist.getTouristId(),
+            "Profile Details Updated",
+            "Your tourist profile information was modified and updated successfully.",
+            "SYSTEM_UPDATE"
+        );
 
         return touristMapper.toResponse(tourist);
     }
@@ -120,6 +131,7 @@ public class TouristServiceImpl implements TouristService {
             return new ResponseStatusException(HttpStatus.NOT_FOUND, "No tourist profile found for the current user");
         });
     }
+
     @Override
     public TouristResponse getTouristByTouristId(Long touristId) {
         // 1. Ensure only staff/admins can use this
@@ -151,10 +163,10 @@ public class TouristServiceImpl implements TouristService {
                     .category(category)
                     .build();
 
-            notificationClient.createNotification(notificationReq);
+            notificationClient.createNotification(notificationReq); // ✅ UNCOMMENTED FOR LIVE CALLS
             log.info("Welcome notification sent successfully to userId: {}", userId);
         } catch (Exception e) {
-            // Fault-tolerance: Registration succeeds even if the notification fails
+            // Fault-tolerance: Registration/Update succeeds even if the notification service fails
             log.error("Failed to push welcome notification: {}", e.getMessage());
         }
     }

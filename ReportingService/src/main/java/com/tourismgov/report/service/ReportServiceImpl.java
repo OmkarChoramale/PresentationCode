@@ -5,6 +5,7 @@ import com.tourismgov.report.dto.*;
 import com.tourismgov.report.enums.ReportScope;
 import com.tourismgov.report.model.Report;
 import com.tourismgov.report.repository.ReportRepository;
+import com.fasterxml.jackson.databind.ObjectMapper; // ✅ Imported successfully
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +21,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
+@RequiredArgsConstructor // ✅ Generates the constructor for all final fields automatically
 public class ReportServiceImpl implements ReportService {
 
     private final ReportRepository reportRepo;
@@ -30,11 +31,12 @@ public class ReportServiceImpl implements ReportService {
     private final ProgramClient programClient;
     private final ComplianceClient complianceClient;
     private final NotificationClient notificationClient;
+    private final ObjectMapper objectMapper; // ✅ FIXED: Declared final field so it can resolve inside methods
 
     @Override
     @Transactional
     public ReportSummaryDTO generateReport(ReportRequestDTO request) {
-        // 1. Identity Verification (Logic Unchanged)
+        // 1. Identity Verification
         UserDTO requester = fetchUserSafely(request.getRequesterId());
 
         if (requester.getRole() == com.tourismgov.report.enums.Role.TOURIST) {
@@ -44,7 +46,7 @@ public class ReportServiceImpl implements ReportService {
             );
         }
 
-        // 2. Data Aggregation (Logic Unchanged)
+        // 2. Data Aggregation
         String reportMetrics = fetchMetricsByScope(request.getScope());
 
         StringBuilder reportLog = new StringBuilder();
@@ -53,7 +55,7 @@ public class ReportServiceImpl implements ReportService {
         reportLog.append("Date: ").append(LocalDateTime.now()).append("\n\n");
         reportLog.append(reportMetrics);
 
-        // 3. Persistence (Logic Unchanged)
+        // 3. Persistence
         Report savedReport = reportRepo.save(Report.builder()
                 .scope(request.getScope())
                 .metrics(reportLog.toString())
@@ -61,23 +63,20 @@ public class ReportServiceImpl implements ReportService {
                 .generatedDate(LocalDateTime.now())
                 .build());
 
-        // ✅ UPDATED: Notification Logic to use DTO
+        // 4. Notification Logic
         try {
-            // Building the request object instead of sending individual params
             NotificationRequestDTO notificationReq = NotificationRequestDTO.builder()
-                    .userId(requester.getUserId())       // Recipient
-                    .entityId(savedReport.getReportId()) // Report ID
+                    .userId(requester.getUserId())       
+                    .entityId(savedReport.getReportId()) 
                     .subject("Report Generated")
                     .message("Your report for scope " + request.getScope() + " has been successfully generated.")
-                    .category("SYSTEM")
+                    .category("REPORT")
                     .build();
 
-            // Calling the updated Feign Client method
             notificationClient.createNotification(notificationReq); 
             log.info("Notification sent for report ID: {}", savedReport.getReportId());
             
         } catch (Exception e) {
-            // Fault-tolerance preserved: report save succeeds even if notification fails
             log.error("Failed to send notification for generated report: {}", e.getMessage());
         }
 
@@ -100,13 +99,29 @@ public class ReportServiceImpl implements ReportService {
                     sb.append(String.format("ProgID: %d | Title: %s | Budget: INR %s | Status: %s\n", 
                         p.getProgramId(), p.getTitle(), p.getBudget(), p.getStatus())));
                 
-                case COMPLIANCE -> complianceClient.getAllComplianceRecords().forEach(c -> 
-                    sb.append(String.format("CompID: %d | EntityID: %d | Type: %s | Result: %s\n", 
-                        c.getComplianceId(), c.getEntityId(), c.getType(), c.getResult())));
+                // ✅ Clean flat list parsing converted directly into pretty-printed JSON string block
+                case COMPLIANCE -> {
+                    List<ComplianceDTO> allCompliance = complianceClient.getAllComplianceRecords();
+                    
+                    if (allCompliance != null && !allCompliance.isEmpty()) {
+                        String jsonOutput = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(allCompliance);
+                        sb.append(jsonOutput).append("\n");
+                    } else {
+                        sb.append("[]\n");
+                    }
+                }
             }
         } catch (Exception e) {
-            log.error("REPORTING ERROR: Failed to fetch data for scope {}. Reason: {}", scope, e.getMessage());
-            sb.append("ERROR: The source service was unreachable. This report contains partial/empty data.");
+            // ✅ Log the full stack trace to your console/terminal logs
+            log.error("REPORTING ERROR: Failed to fetch data for scope {}.", scope, e);
+            
+            // ✅ Append the REAL error type and message directly into your generated report file
+            sb.append("--- CRITICAL RUNTIME EXCEPTION CAUGHT ---\n");
+            sb.append("Error Type: ").append(e.getClass().getName()).append("\n");
+            sb.append("Message: ").append(e.getMessage()).append("\n");
+            if (e.getCause() != null) {
+                sb.append("Cause: ").append(e.getCause().getMessage()).append("\n");
+            }
         }
         return sb.toString();
     }

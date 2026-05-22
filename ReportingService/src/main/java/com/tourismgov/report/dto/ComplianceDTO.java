@@ -14,8 +14,8 @@ public class ComplianceDTO {
     private Long complianceId;
     private String referenceNumber;
     private Long entityId;
-    private String type;
-    private String result;
+    private String type;   // ✅ MUST BE STRING, NOT AN ENUM OBJECT
+    private String result; // ✅ MUST BE STRING, NOT AN ENUM OBJECT
     private LocalDateTime date;
     private String notes;
 }
