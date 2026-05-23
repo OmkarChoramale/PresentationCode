@@ -1,0 +1,17 @@
+[19/05, 12:03] Swarnendu Maity: Question are like--
+Explain your projects
+What are design patterns used in your projects.
+What is the purpose of the service registry.
+Explain to me the code of circuit breakers all sliding windows and all.
+Explain to me how you connect backend and Frontend
+ 
+Eureka Server you are using in production, you change the port after 5 years. Will it make any difference in the application.
+[19/05, 12:03] Swarnendu Maity: Self intro
+Project workflow of ur module on ui
+Backend code ...explain the MVC architecture...from controller to service
+What are the validation u used ...explain dto layer
+What is eureka server ...why we use it
+What is api gateway and its use ...
+Circuitbreaker and it's configuration in yml file
+Why we prefer constructor injection instead of field injection
+Have u written test cases ? Junit ...explain how u are testing using @mock and @InjectMock
